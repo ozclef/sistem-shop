@@ -227,7 +227,7 @@ async function loadInitialPosInventory(){
   if(stored) return JSON.parse(stored);
   try{
     // try pos_inventory_example.json (created by the environment)
-    const r = await fetch('pos_inventory_example.json');
+    const r = await fetch('inventorio.json');
     const obj = await r.json();
     localStorage.setItem(POS_KEY.INVENTORY, JSON.stringify(obj));
     return obj;
@@ -245,9 +245,11 @@ function saveMovements(movs){ localStorage.setItem(POS_KEY.MOVEMENTS, JSON.strin
 function centsFromFloat(n){ const x = Number(n||0); if(Number.isNaN(x)) return 0; return Math.round(x*100); }
 function moneyFromCents(c){ return (c/100).toFixed(2); }
 function nowISO(){ return new Date().toISOString(); }
+    /*
 """
 
 pos_accounting_js = r"""
+*/
 // pos_accounting.js - lógica para registrar venta y movimientos (atómico en cliente)
 async function sellPos(cartItems, paymentMethod, paymentAmountFloat, cashier='cashier'){
   // cartItems: [{id, qty}]
@@ -697,7 +699,7 @@ async function loadInitialPosInventory(){
   const stored = localStorage.getItem(POS_KEY.INVENTORY);
   if(stored) return JSON.parse(stored);
   try{
-    const r = await fetch('pos_inventory_example.json');
+    const r = await fetch('inventario.json');
     const obj = await r.json();
     localStorage.setItem(POS_KEY.INVENTORY, JSON.stringify(obj));
     return obj;
