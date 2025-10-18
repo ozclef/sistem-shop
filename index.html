@@ -1,0 +1,978 @@
+
+<!-------
+
+
+# Crear una mini-aplicación POS (index_pos.html + pos.js + pos_styles.css + pos_storage.js + pos_accounting.js)
+from pathlib import Path
+import json
+
+DATA_DIR = Path("/mnt/data")
+inventory_file = DATA_DIR / "inventario_emilio.json"
+
+# Leer inventario existente (primera hoja) para ejemplo/precarga
+inventory = []
+if inventory_file.exists():
+    try:
+        with open(inventory_file, "r", encoding="utf-8") as f:
+            all_json = json.load(f)
+            first = next(iter(all_json.keys())) if isinstance(all_json, dict) and len(all_json)>0 else None
+            if first:
+                inventory = all_json[first]
+            elif isinstance(all_json, list):
+                inventory = all_json
+    except Exception as e:
+        inventory = []
+
+# Normalize inventory into required schema if possible: ensure id, name, stock, price_cents, expiry
+normalized = []
+for i, row in enumerate(inventory):
+    # Try common keys
+    name = row.get("Item") or row.get("Nombre") or row.get("name") or row.get("producto") or f"Producto {i+1}"
+    qty = row.get("Cantidad") or row.get("Stock") or row.get("stock") or 0
+    # price unknown -> 0. If there's a Precio or price, convert to cents if float
+    raw_price = row.get("Precio") or row.get("price") or 0
+    try:
+        price_float = float(raw_price) if raw_price not in (None, "") else 0.0
+    except:
+        price_float = 0.0
+    price_cents = int(round(price_float * 100))
+    expiry = row.get("FechaCaducidad") or row.get("fecha") or row.get("expiry") or None
+    pid = row.get("Codigo") or row.get("id") or f"P{1000+i}"
+    normalized.append({
+        "id": str(pid),
+        "name": str(name),
+        "stock": int(qty) if qty not in (None, "") else 0,
+        "price_cents": price_cents,
+        "expiry": expiry
+    })
+
+# Save a backup normalized inventory example for POS to use if localStorage empty
+pos_inventory_path = DATA_DIR / "pos_inventory_example.json"
+with open(pos_inventory_path, "w", encoding="utf-8") as f:
+    json.dump(normalized, f, indent=2, ensure_ascii=False)
+
+# Crear archivos de la aplicación POS
+index_html = """<!doctype html>---------->
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>POS - Punto de Venta (Demo)</title>
+  <link rel="stylesheet" href="pos_styles.css">
+  <style>
+  /* pos_styles.css - estilos sencillos para POS */
+body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:#f4f6f8;color:#111}
+.header{background:#2b6df6;color:white;padding:12px}
+.header h1{margin:0;font-size:18px}
+.layout{display:flex;gap:12px;padding:12px}
+.left{flex:1}
+.right{width:340px}
+.search-block{position:relative;margin-bottom:8px}
+#barcode-input{width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;font-size:16px}
+.suggestions{position:absolute;left:0;right:0;background:white;border:1px solid #ddd;border-top:0;max-height:180px;overflow:auto;z-index:20}
+.suggestions div{padding:8px;cursor:pointer}
+.suggestions div:hover{background:#f0f4ff}
+.cart{background:white;padding:12px;border-radius:8px;box-shadow:0 6px 20px rgba(20,30,40,0.06)}
+.cart h2{margin-top:0}
+#cart-table{width:100%;border-collapse:collapse}
+#cart-table th,#cart-table td{padding:6px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+.totals{margin-top:8px;font-weight:600}
+.total{font-size:18px;margin-top:6px}
+.actions{display:flex;gap:8px;margin-top:10px}
+button{padding:8px 10px;border-radius:6px;border:0;cursor:pointer}
+button.primary{background:#2b6df6;color:white}
+button.secondary{background:#eee}
+.inventory-list{background:white;padding:8px;border-radius:8px;max-height:520px;overflow:auto;box-shadow:0 6px 20px rgba(20,30,40,0.04)}
+.inv-item{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f1f1f1}
+.inv-item .meta{font-size:13px;color:#666}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal.hidden{display:none}
+.modal-card{background:white;padding:12px;border-radius:8px;width:320px}
+.form-row{margin-top:8px}
+.form-row label{display:block;font-size:13px;color:#555;margin-bottom:4px}
+.form-row input, .form-row select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+
+</style>
+</head>
+<body>
+  <header class="header">
+    <h1>POS - Punto de Venta (Demo)</h1>
+    <div class="meta">Usuario: <strong>cashier</strong> · Demo local</div>
+  </header>
+
+  <main class="layout">
+    <section class="left">
+      <div class="search-block">
+        <input id="barcode-input" placeholder="Escanea código o escribe nombre/producto..." autofocus autocomplete="off">
+        <div id="suggestions" class="suggestions"></div>
+      </div>
+
+      <div class="cart">
+        <h2>Carrito</h2>
+        <table id="cart-table">
+          <thead><tr><th>Producto</th><th>Cant</th><th>Precio</th><th>Sub</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="totals">
+          <div>Subtotal: <span id="subtotal">0.00</span></div>
+          <div>Impuesto: <span id="tax">0.00</span></div>
+          <div class="total">Total: <span id="total">0.00</span></div>
+        </div>
+        <div class="actions">
+          <button id="btn-clear">Limpiar</button>
+          <button id="btn-checkout" class="primary">COBRAR</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right">
+      <h2>Inventario (vista)</h2>
+      <div class="inventory-list" id="inventory-list"></div>
+      <div class="notes">
+        <p>Tips: usa la caja de búsqueda para autocompletar. Un escáner de códigos funciona como teclado (inserta el código y presiona Enter).</p>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Modal checkout -->
+  <div id="modal-checkout" class="modal hidden">
+    <div class="modal-card">
+      <h3>Cobrar</h3>
+      <div>Subtotal: <span id="m-subtotal"></span></div>
+      <div>Total: <span id="m-total"></span></div>
+      <div class="form-row">
+        <label>Forma de pago</label>
+        <select id="payment-method">
+          <option value="cash">Efectivo</option>
+          <option value="card">Tarjeta</option>
+          <option value="phone">Pago por teléfono</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Monto recibido</label>
+        <input id="payment-amount" type="number" step="0.01" />
+      </div>
+      <div class="form-row">
+        <label>Cambio</label>
+        <div id="payment-change">0.00</div>
+      </div>
+      <div class="modal-actions">
+        <button id="modal-cancel">Cancelar</button>
+        <button id="modal-pay" class="primary">Registrar venta</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="pos_storage.js"></script>
+  <script src="pos_accounting.js"></script>
+  <script src="pos.js"></script>
+
+
+  <script>
+<!----
+  < /body>
+/* < /html>
+"""
+pos_styles = """
+"""
+
+pos_storage_js = r"""
+
+    ------>*/
+// pos_storage.js - helpers para POS
+const POS_KEY = {
+  INVENTORY: 'pos_inventory',
+  SALES: 'pos_sales',
+  MOVEMENTS: 'pos_movements',
+  USERS: 'pos_users'
+};
+
+async function loadInitialPosInventory(){
+  // prefer localStorage, else load pos_inventory_example.json or inventario_emilio.json
+  const stored = localStorage.getItem(POS_KEY.INVENTORY);
+  if(stored) return JSON.parse(stored);
+  try{
+    // try pos_inventory_example.json (created by the environment)
+    const r = await fetch('pos_inventory_example.json');
+    const obj = await r.json();
+    localStorage.setItem(POS_KEY.INVENTORY, JSON.stringify(obj));
+    return obj;
+  }catch(e){
+    // fallback empty
+    return [];
+  }
+}
+function saveInventory(inv){ localStorage.setItem(POS_KEY.INVENTORY, JSON.stringify(inv)); }
+function loadSales(){ return JSON.parse(localStorage.getItem(POS_KEY.SALES) || '[]'); }
+function saveSales(sales){ localStorage.setItem(POS_KEY.SALES, JSON.stringify(sales)); }
+function loadMovements(){ return JSON.parse(localStorage.getItem(POS_KEY.MOVEMENTS) || '[]'); }
+function saveMovements(movs){ localStorage.setItem(POS_KEY.MOVEMENTS, JSON.stringify(movs)); }
+
+function centsFromFloat(n){ const x = Number(n||0); if(Number.isNaN(x)) return 0; return Math.round(x*100); }
+function moneyFromCents(c){ return (c/100).toFixed(2); }
+function nowISO(){ return new Date().toISOString(); }
+"""
+
+pos_accounting_js = r"""
+// pos_accounting.js - lógica para registrar venta y movimientos (atómico en cliente)
+async function sellPos(cartItems, paymentMethod, paymentAmountFloat, cashier='cashier'){
+  // cartItems: [{id, qty}]
+  const inventory = JSON.parse(localStorage.getItem(POS_KEY.INVENTORY) || '[]');
+  const sales = loadSales();
+  const movs = loadMovements();
+
+  // build lines and validate stock
+  const lines = [];
+  for(const it of cartItems){
+    const p = inventory.find(x=>String(x.id) === String(it.id));
+    if(!p) throw new Error('Producto no encontrado: '+ it.id);
+    if(p.stock < it.qty) throw new Error('Stock insuficiente: '+p.name);
+    const price = p.price_cents || 0;
+    const line_sub = price * it.qty;
+    lines.push({product_id: p.id, name: p.name, qty: it.qty, price_cents: price, line_sub});
+  }
+
+  const subtotal = lines.reduce((s,l)=> s + l.line_sub, 0);
+  const tax_percent = 0.16;
+  const tax = Math.round(subtotal * tax_percent);
+  const total = subtotal + tax;
+
+  const paymentAmountCents = centsFromFloat(paymentAmountFloat);
+  if(paymentAmountCents < total) throw new Error('Pago insuficiente');
+
+  const change = paymentAmountCents - total;
+
+  // create sale record
+  const saleId = 'S' + (new Date()).toISOString().replace(/[:.T-]/g,'').slice(0,14);
+  const sale = {
+    id: saleId,
+    date: nowISO(),
+    items: lines.map(l=>({product_id:l.product_id, qty:l.qty, price_cents:l.price_cents})),
+    subtotal_cents: subtotal,
+    tax_cents: tax,
+    total_cents: total,
+    payment: {method: paymentMethod, amount_cents: paymentAmountCents, change_cents: change},
+    cashier
+  };
+
+  // apply stock changes
+  for(const l of lines){
+    const p = inventory.find(x=>String(x.id) === String(l.product_id));
+    p.stock = p.stock - l.qty;
+    if(p.stock < 0) throw new Error('Stock negativo detectado');
+  }
+
+  // record movement
+  const mov = {
+    id: 'M' + (new Date()).toISOString().replace(/[:.T-]/g,'').slice(0,14),
+    date: nowISO(),
+    type: 'venta',
+    ref: sale.id,
+    account: 'Caja',
+    debit_cents: total,
+    credit_cents: 0,
+    note: 'Venta POS ' + sale.id
+  };
+
+  // commit
+  saveInventory(inventory);
+  sales.push(sale); saveSales(sales);
+  movs.push(mov); saveMovements(movs);
+
+  return {sale, mov, change};
+}
+
+function generateReceiptText(sale){
+  const lines = [];
+  lines.push('------ TICKET ------');
+  lines.push('ID: ' + sale.id);
+  lines.push('Fecha: ' + sale.date);
+  lines.push('--------------------');
+  for(const it of sale.items){
+    const lineTotal = (it.qty * it.price_cents)/100;
+    lines.push(`${it.qty} x ${it.product_id} ${it.name} @ ${(it.price_cents/100).toFixed(2)} = ${lineTotal.toFixed(2)}`);
+  }
+  lines.push('--------------------');
+  lines.push('Subtotal: ' + (sale.subtotal_cents/100).toFixed(2));
+  lines.push('Impuesto: ' + (sale.tax_cents/100).toFixed(2));
+  lines.push('Total: ' + (sale.total_cents/100).toFixed(2));
+  lines.push('Pago: ' + (sale.payment.amount_cents/100).toFixed(2));
+  lines.push('Cambio: ' + (sale.payment.change_cents/100).toFixed(2));
+  lines.push('--------------------');
+  return lines.join('\\n');
+}
+"""
+
+pos_js = r"""
+// pos.js - UI logic for POS demo
+document.addEventListener('DOMContentLoaded', async ()=>{
+  const input = document.getElementById('barcode-input');
+  const suggestions = document.getElementById('suggestions');
+  const invList = document.getElementById('inventory-list');
+  const cartTableBody = document.querySelector('#cart-table tbody');
+  const subtotalEl = document.getElementById('subtotal');
+  const taxEl = document.getElementById('tax');
+  const totalEl = document.getElementById('total');
+  const btnClear = document.getElementById('btn-clear');
+  const btnCheckout = document.getElementById('btn-checkout');
+
+  let inventory = await loadInitialPosInventory();
+  let cart = []; // {id, name, price_cents, qty}
+
+  function renderInventory(){
+    invList.innerHTML = '';
+    for(const p of inventory){
+      const div = document.createElement('div');
+      div.className = 'inv-item';
+      div.innerHTML = `<div><strong>${p.name}</strong><div class="meta">id:${p.id} · stock: ${p.stock} · $${(p.price_cents/100).toFixed(2)}</div></div><div><button data-id="${p.id}" class="btn-add">+</button></div>`;
+      invList.appendChild(div);
+    }
+    // attach add buttons
+    document.querySelectorAll('.btn-add').forEach(b=> b.addEventListener('click', ()=>{
+      const id = b.dataset.id; addToCartById(id);
+    }));
+  }
+
+  function formatMoney(cents){ return (cents/100).toFixed(2); }
+
+  function findProductByQuery(q){
+    q = String(q||'').toLowerCase();
+    return inventory.filter(p => (p.name||'').toLowerCase().includes(q) || String(p.id).toLowerCase() === q);
+  }
+
+  function showSuggestions(list){
+    suggestions.innerHTML = '';
+    if(!list || list.length===0){ suggestions.style.display='none'; return; }
+    suggestions.style.display='block';
+    list.slice(0,10).forEach(p=>{
+      const d = document.createElement('div');
+      d.textContent = `${p.name} · ${p.id} · $${(p.price_cents/100).toFixed(2)} · stock:${p.stock}`;
+      d.dataset.id = p.id;
+      d.addEventListener('click', ()=>{ addToCartById(p.id); suggestions.style.display='none'; input.value=''; input.focus(); });
+      suggestions.appendChild(d);
+    });
+  }
+
+  input.addEventListener('input', (e)=>{
+    const q = e.target.value.trim();
+    if(!q){ suggestions.style.display='none'; return; }
+    const results = findProductByQuery(q);
+    showSuggestions(results);
+  });
+
+  input.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      const q = input.value.trim();
+      if(!q) return;
+      // if exact id matches, add that; else add first suggestion
+      const exact = inventory.find(p=>String(p.id) === q);
+      if(exact) { addToCartById(exact.id); input.value=''; suggestions.style.display='none'; return; }
+      const results = findProductByQuery(q);
+      if(results.length>0){ addToCartById(results[0].id); input.value=''; suggestions.style.display='none'; return; }
+    }
+  });
+
+  function addToCartById(id){
+    const prod = inventory.find(p=> String(p.id) === String(id));
+    if(!prod) return alert('Producto no encontrado');
+    const existing = cart.find(c=> String(c.id) === String(id));
+    if(existing){
+      if(prod.stock <= existing.qty) return alert('No hay suficiente stock');
+      existing.qty += 1;
+    } else {
+      if(prod.stock <= 0) return alert('Sin stock');
+      cart.push({id: prod.id, name: prod.name, price_cents: prod.price_cents, qty: 1});
+    }
+    renderCart();
+  }
+
+  function renderCart(){
+    cartTableBody.innerHTML = '';
+    for(const [i,item] of cart.entries()){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${item.name}</td><td><input class="qty" data-i="${i}" value="${item.qty}" type="number" min="1" style="width:60px"></td><td>$${formatMoney(item.price_cents)}</td><td>$${formatMoney(item.price_cents * item.qty)}</td><td><button class="btn-remove" data-i="${i}">x</button></td>`;
+      cartTableBody.appendChild(tr);
+    }
+    // attach events
+    document.querySelectorAll('.btn-remove').forEach(b=> b.addEventListener('click', ()=>{ const i=Number(b.dataset.i); cart.splice(i,1); renderCart(); }));
+    document.querySelectorAll('.qty').forEach(inp=> inp.addEventListener('change', ()=>{ const i=Number(inp.dataset.i); const v = Number(inp.value||1); if(v<1) inp.value=1; // sanity; check stock
+      const p = inventory.find(x=> String(x.id) === String(cart[i].id));
+      if(v > p.stock){ alert('Sobre stock disponible'); inp.value = cart[i].qty; return; }
+      cart[i].qty = v; renderCart(); }));
+    updateTotals();
+  }
+
+  function updateTotals(){
+    const subtotal = cart.reduce((s,i)=> s + i.price_cents * i.qty, 0);
+    const tax = Math.round(subtotal * 0.16);
+    const total = subtotal + tax;
+    subtotalEl.textContent = (subtotal/100).toFixed(2);
+    taxEl.textContent = (tax/100).toFixed(2);
+    totalEl.textContent = (total/100).toFixed(2);
+    return {subtotal, tax, total};
+  }
+
+  btnClear.addEventListener('click', ()=>{ cart = []; renderCart(); });
+
+  btnCheckout.addEventListener('click', ()=>{
+    if(cart.length === 0) return alert('Carrito vacío');
+    const t = updateTotals();
+    document.getElementById('m-subtotal').textContent = (t.subtotal/100).toFixed(2);
+    document.getElementById('m-total').textContent = (t.total/100).toFixed(2);
+    document.getElementById('payment-amount').value = (t.total/100).toFixed(2);
+    document.getElementById('modal-checkout').classList.remove('hidden');
+  });
+
+  document.getElementById('modal-cancel').addEventListener('click', ()=> document.getElementById('modal-checkout').classList.add('hidden'));
+
+  document.getElementById('modal-pay').addEventListener('click', async ()=>{
+    try{
+      const method = document.getElementById('payment-method').value;
+      const amount = Number(document.getElementById('payment-amount').value || 0);
+      const t = updateTotals();
+      const result = await sellPos(cart.map(c=>({id:c.id, qty:c.qty})), method, amount, 'cashier');
+      // show receipt and print
+      const txt = generateReceiptText(result.sale);
+      const w = window.open('', '_blank');
+      w.document.write('<pre>'+txt+'</pre>');
+      w.document.close();
+      // reset cart and refresh inventory UI
+      cart = []; renderCart();
+      inventory = await loadInitialPosInventory(); // reload from storage
+      renderInventory();
+      document.getElementById('modal-checkout').classList.add('hidden');
+      alert('Venta registrada: ' + result.sale.id);
+    }catch(err){
+      alert('Error: ' + err.message);
+    }
+  });
+
+  // init render
+  renderInventory();
+  renderCart();
+
+});
+"""
+
+# Escribir archivos
+(DATA_DIR / "index_pos.html").write_text(index_html, encoding="utf-8")
+(DATA_DIR / "pos_styles.css").write_text(pos_styles, encoding="utf-8")
+(DATA_DIR / "pos_storage.js").write_text(pos_storage_js, encoding="utf-8")
+(DATA_DIR / "pos_accounting.js").write_text(pos_accounting_js, encoding="utf-8")
+(DATA_DIR / "pos.js").write_text(pos_js, encoding="utf-8")
+
+# Resultado: listar archivos creados
+created = [
+    "/mnt/data/index_pos.html",
+    "/mnt/data/pos_styles.css",
+    "/mnt/data/pos_storage.js",
+    "/mnt/data/pos_accounting.js",
+    "/mnt/data/pos.js",
+    "/mnt/data/pos_inventory_example.json"
+]
+print("Archivos creados:", created)
+
+Analizado
+python
+Mostrar siempre los detalles
+
+Copiar código
+# Retry: Crear la mini-aplicación POS en /mnt/data (index_pos.html + pos.js + pos_styles.css + pos_storage.js + pos_accounting.js)
+from pathlib import Path
+import json
+
+DATA_DIR = Path("/mnt/data")
+inventory_file = DATA_DIR / "inventario_emilio.json"
+
+# Leer inventario existente (primera hoja) para ejemplo/precarga
+inventory = []
+if inventory_file.exists():
+    try:
+        with open(inventory_file, "r", encoding="utf-8") as f:
+            all_json = json.load(f)
+            first = next(iter(all_json.keys())) if isinstance(all_json, dict) and len(all_json)>0 else None
+            if first:
+                inventory = all_json[first]
+            elif isinstance(all_json, list):
+                inventory = all_json
+    except Exception as e:
+        inventory = []
+
+# Normalize inventory into required schema if possible: ensure id, name, stock, price_cents, expiry
+normalized = []
+for i, row in enumerate(inventory):
+    # Try common keys
+    name = row.get("Item") or row.get("Nombre") or row.get("name") or row.get("producto") or f"Producto {i+1}"
+    qty = row.get("Cantidad") or row.get("Stock") or row.get("stock") or 0
+    raw_price = row.get("Precio") or row.get("price") or 0
+    try:
+        price_float = float(raw_price) if raw_price not in (None, "") else 0.0
+    except:
+        price_float = 0.0
+    price_cents = int(round(price_float * 100))
+    expiry = row.get("FechaCaducidad") or row.get("fecha") or row.get("expiry") or None
+    pid = row.get("Codigo") or row.get("id") or f"P{1000+i}"
+    normalized.append({
+        "id": str(pid),
+        "name": str(name),
+        "stock": int(qty) if qty not in (None, "") else 0,
+        "price_cents": price_cents,
+        "expiry": expiry
+    })
+
+# Save a backup normalized inventory example for POS to use if localStorage empty
+pos_inventory_path = DATA_DIR / "pos_inventory_example.json"
+with open(pos_inventory_path, "w", encoding="utf-8") as f:
+    json.dump(normalized, f, indent=2, ensure_ascii=False)
+
+# Crear archivos de la aplicación POS
+index_html = """<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>POS - Punto de Venta (Demo)</title>
+  <link rel="stylesheet" href="pos_styles.css">
+</head>
+<body>
+  <header class="header">
+    <h1>POS - Punto de Venta (Demo)</h1>
+    <div class="meta">Usuario: <strong>cashier</strong> · Demo local</div>
+  </header>
+
+  <main class="layout">
+    <section class="left">
+      <div class="search-block">
+        <input id="barcode-input" placeholder="Escanea código o escribe nombre/producto..." autofocus autocomplete="off">
+        <div id="suggestions" class="suggestions"></div>
+      </div>
+
+      <div class="cart">
+        <h2>Carrito</h2>
+        <table id="cart-table">
+          <thead><tr><th>Producto</th><th>Cant</th><th>Precio</th><th>Sub</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="totals">
+          <div>Subtotal: <span id="subtotal">0.00</span></div>
+          <div>Impuesto: <span id="tax">0.00</span></div>
+          <div class="total">Total: <span id="total">0.00</span></div>
+        </div>
+        <div class="actions">
+          <button id="btn-clear">Limpiar</button>
+          <button id="btn-checkout" class="primary">COBRAR</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right">
+      <h2>Inventario (vista)</h2>
+      <div class="inventory-list" id="inventory-list"></div>
+      <div class="notes">
+        <p>Tips: usa la caja de búsqueda para autocompletar. Un escáner de códigos funciona como teclado (inserta el código y presiona Enter).</p>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Modal checkout -->
+  <div id="modal-checkout" class="modal hidden">
+    <div class="modal-card">
+      <h3>Cobrar</h3>
+      <div>Subtotal: <span id="m-subtotal"></span></div>
+      <div>Total: <span id="m-total"></span></div>
+      <div class="form-row">
+        <label>Forma de pago</label>
+        <select id="payment-method">
+          <option value="cash">Efectivo</option>
+          <option value="card">Tarjeta</option>
+          <option value="phone">Pago por teléfono</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Monto recibido</label>
+        <input id="payment-amount" type="number" step="0.01" />
+      </div>
+      <div class="form-row">
+        <label>Cambio</label>
+        <div id="payment-change">0.00</div>
+      </div>
+      <div class="modal-actions">
+        <button id="modal-cancel">Cancelar</button>
+        <button id="modal-pay" class="primary">Registrar venta</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="pos_storage.js"></script>
+  <script src="pos_accounting.js"></script>
+  <script src="pos.js"></script>
+</body>
+</html>
+"""
+
+pos_styles = """
+/* pos_styles.css - estilos sencillos para POS */
+body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:#f4f6f8;color:#111}
+.header{background:#2b6df6;color:white;padding:12px}
+.header h1{margin:0;font-size:18px}
+.layout{display:flex;gap:12px;padding:12px}
+.left{flex:1}
+.right{width:340px}
+.search-block{position:relative;margin-bottom:8px}
+#barcode-input{width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;font-size:16px}
+.suggestions{position:absolute;left:0;right:0;background:white;border:1px solid #ddd;border-top:0;max-height:180px;overflow:auto;z-index:20}
+.suggestions div{padding:8px;cursor:pointer}
+.suggestions div:hover{background:#f0f4ff}
+.cart{background:white;padding:12px;border-radius:8px;box-shadow:0 6px 20px rgba(20,30,40,0.06)}
+.cart h2{margin-top:0}
+#cart-table{width:100%;border-collapse:collapse}
+#cart-table th,#cart-table td{padding:6px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+.totals{margin-top:8px;font-weight:600}
+.total{font-size:18px;margin-top:6px}
+.actions{display:flex;gap:8px;margin-top:10px}
+button{padding:8px 10px;border-radius:6px;border:0;cursor:pointer}
+button.primary{background:#2b6df6;color:white}
+button.secondary{background:#eee}
+.inventory-list{background:white;padding:8px;border-radius:8px;max-height:520px;overflow:auto;box-shadow:0 6px 20px rgba(20,30,40,0.04)}
+.inv-item{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f1f1f1}
+.inv-item .meta{font-size:13px;color:#666}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal.hidden{display:none}
+.modal-card{background:white;padding:12px;border-radius:8px;width:320px}
+.form-row{margin-top:8px}
+.form-row label{display:block;font-size:13px;color:#555;margin-bottom:4px}
+.form-row input, .form-row select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+"""
+
+pos_storage_js = r"""
+// pos_storage.js - helpers para POS
+const POS_KEY = {
+  INVENTORY: 'pos_inventory',
+  SALES: 'pos_sales',
+  MOVEMENTS: 'pos_movements',
+  USERS: 'pos_users'
+};
+
+async function loadInitialPosInventory(){
+  // prefer localStorage, else load pos_inventory_example.json
+  const stored = localStorage.getItem(POS_KEY.INVENTORY);
+  if(stored) return JSON.parse(stored);
+  try{
+    const r = await fetch('pos_inventory_example.json');
+    const obj = await r.json();
+    localStorage.setItem(POS_KEY.INVENTORY, JSON.stringify(obj));
+    return obj;
+  }catch(e){
+    return [];
+  }
+}
+function saveInventory(inv){ localStorage.setItem(POS_KEY.INVENTORY, JSON.stringify(inv)); }
+function loadSales(){ return JSON.parse(localStorage.getItem(POS_KEY.SALES) || '[]'); }
+function saveSales(sales){ localStorage.setItem(POS_KEY.SALES, JSON.stringify(sales)); }
+function loadMovements(){ return JSON.parse(localStorage.getItem(POS_KEY.MOVEMENTS) || '[]'); }
+function saveMovements(movs){ localStorage.setItem(POS_KEY.MOVEMENTS, JSON.stringify(movs)); }
+
+function centsFromFloat(n){ const x = Number(n||0); if(Number.isNaN(x)) return 0; return Math.round(x*100); }
+function moneyFromCents(c){ return (c/100).toFixed(2); }
+function nowISO(){ return new Date().toISOString(); }
+"""
+
+pos_accounting_js = r"""
+// pos_accounting.js - lógica para registrar venta y movimientos (atómico en cliente)
+async function sellPos(cartItems, paymentMethod, paymentAmountFloat, cashier='cashier'){
+  // cartItems: [{id, qty}]
+  const inventory = JSON.parse(localStorage.getItem(POS_KEY.INVENTORY) || '[]');
+  const sales = loadSales();
+  const movs = loadMovements();
+
+  // build lines and validate stock
+  const lines = [];
+  for(const it of cartItems){
+    const p = inventory.find(x=>String(x.id) === String(it.id));
+    if(!p) throw new Error('Producto no encontrado: '+ it.id);
+    if(p.stock < it.qty) throw new Error('Stock insuficiente: '+p.name);
+    const price = p.price_cents || 0;
+    const line_sub = price * it.qty;
+    lines.push({product_id: p.id, name: p.name, qty: it.qty, price_cents: price, line_sub});
+  }
+
+  const subtotal = lines.reduce((s,l)=> s + l.line_sub, 0);
+  const tax_percent = 0.16;
+  const tax = Math.round(subtotal * tax_percent);
+  const total = subtotal + tax;
+
+  const paymentAmountCents = centsFromFloat(paymentAmountFloat);
+  if(paymentAmountCents < total) throw new Error('Pago insuficiente');
+
+  const change = paymentAmountCents - total;
+
+  // create sale record
+  const saleId = 'S' + (new Date()).toISOString().replace(/[:.T-]/g,'').slice(0,14);
+  const sale = {
+    id: saleId,
+    date: nowISO(),
+    items: lines.map(l=>({product_id:l.product_id, qty:l.qty, price_cents:l.price_cents})),
+    subtotal_cents: subtotal,
+    tax_cents: tax,
+    total_cents: total,
+    payment: {method: paymentMethod, amount_cents: paymentAmountCents, change_cents: change},
+    cashier
+  };
+
+  // apply stock changes
+  for(const l of lines){
+    const p = inventory.find(x=>String(x.id) === String(l.product_id));
+    p.stock = p.stock - l.qty;
+    if(p.stock < 0) throw new Error('Stock negativo detectado');
+  }
+
+  // record movement
+  const mov = {
+    id: 'M' + (new Date()).toISOString().replace(/[:.T-]/g,'').slice(0,14),
+    date: nowISO(),
+    type: 'venta',
+    ref: sale.id,
+    account: 'Caja',
+    debit_cents: total,
+    credit_cents: 0,
+    note: 'Venta POS ' + sale.id
+  };
+
+  // commit
+  saveInventory(inventory);
+  sales.push(sale); saveSales(sales);
+  movs.push(mov); saveMovements(movs);
+
+  return {sale, mov, change};
+}
+
+function generateReceiptText(sale){
+  const lines = [];
+  lines.push('------ TICKET ------');
+  lines.push('ID: ' + sale.id);
+  lines.push('Fecha: ' + sale.date);
+  lines.push('--------------------');
+  for(const it of sale.items){
+    const lineTotal = (it.qty * it.price_cents)/100;
+    lines.push(`${it.qty} x ${it.product_id} ${it.name} @ ${(it.price_cents/100).toFixed(2)} = ${lineTotal.toFixed(2)}`);
+  }
+  lines.push('--------------------');
+  lines.push('Subtotal: ' + (sale.subtotal_cents/100).toFixed(2));
+  lines.push('Impuesto: ' + (sale.tax_cents/100).toFixed(2));
+  lines.push('Total: ' + (sale.total_cents/100).toFixed(2));
+  lines.push('Pago: ' + (sale.payment.amount_cents/100).toFixed(2));
+  lines.push('Cambio: ' + (sale.payment.change_cents/100).toFixed(2));
+  lines.push('--------------------');
+  return lines.join('\\n');
+}
+"""
+
+pos_js = r"""
+// pos.js - UI logic for POS demo
+document.addEventListener('DOMContentLoaded', async ()=>{
+  const input = document.getElementById('barcode-input');
+  const suggestions = document.getElementById('suggestions');
+  const invList = document.getElementById('inventory-list');
+  const cartTableBody = document.querySelector('#cart-table tbody');
+  const subtotalEl = document.getElementById('subtotal');
+  const taxEl = document.getElementById('tax');
+  const totalEl = document.getElementById('total');
+  const btnClear = document.getElementById('btn-clear');
+  const btnCheckout = document.getElementById('btn-checkout');
+
+  let inventory = await loadInitialPosInventory();
+  let cart = []; // {id, name, price_cents, qty}
+
+  function renderInventory(){
+    invList.innerHTML = '';
+    for(const p of inventory){
+      const div = document.createElement('div');
+      div.className = 'inv-item';
+      div.innerHTML = `<div><strong>${p.name}</strong><div class="meta">id:${p.id} · stock: ${p.stock} · $${(p.price_cents/100).toFixed(2)}</div></div><div><button data-id="${p.id}" class="btn-add">+</button></div>`;
+      invList.appendChild(div);
+    }
+    // attach add buttons
+    document.querySelectorAll('.btn-add').forEach(b=> b.addEventListener('click', ()=>{
+      const id = b.dataset.id; addToCartById(id);
+    }));
+  }
+
+  function formatMoney(cents){ return (cents/100).toFixed(2); }
+
+  function findProductByQuery(q){
+    q = String(q||'').toLowerCase();
+    return inventory.filter(p => (p.name||'').toLowerCase().includes(q) || String(p.id).toLowerCase() === q);
+  }
+
+  function showSuggestions(list){
+    suggestions.innerHTML = '';
+    if(!list || list.length===0){ suggestions.style.display='none'; return; }
+    suggestions.style.display='block';
+    list.slice(0,10).forEach(p=>{
+      const d = document.createElement('div');
+      d.textContent = `${p.name} · ${p.id} · $${(p.price_cents/100).toFixed(2)} · stock:${p.stock}`;
+      d.dataset.id = p.id;
+      d.addEventListener('click', ()=>{ addToCartById(p.id); suggestions.style.display='none'; input.value=''; input.focus(); });
+      suggestions.appendChild(d);
+    });
+  }
+
+  input.addEventListener('input', (e)=>{
+    const q = e.target.value.trim();
+    if(!q){ suggestions.style.display='none'; return; }
+    const results = findProductByQuery(q);
+    showSuggestions(results);
+  });
+
+  input.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      const q = input.value.trim();
+      if(!q) return;
+      const exact = inventory.find(p=>String(p.id) === q);
+      if(exact) { addToCartById(exact.id); input.value=''; suggestions.style.display='none'; return; }
+      const results = findProductByQuery(q);
+      if(results.length>0){ addToCartById(results[0].id); input.value=''; suggestions.style.display='none'; return; }
+    }
+  });
+
+  function addToCartById(id){
+    const prod = inventory.find(p=> String(p.id) === String(id));
+    if(!prod) return alert('Producto no encontrado');
+    const existing = cart.find(c=> String(c.id) === String(id));
+    if(existing){
+      if(prod.stock <= existing.qty) return alert('No hay suficiente stock');
+      existing.qty += 1;
+    } else {
+      if(prod.stock <= 0) return alert('Sin stock');
+      cart.push({id: prod.id, name: prod.name, price_cents: prod.price_cents, qty: 1});
+    }
+    renderCart();
+  }
+
+  function renderCart(){
+    cartTableBody.innerHTML = '';
+    for(const [i,item] of cart.entries()){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${item.name}</td><td><input class="qty" data-i="${i}" value="${item.qty}" type="number" min="1" style="width:60px"></td><td>$${formatMoney(item.price_cents)}</td><td>$${formatMoney(item.price_cents * item.qty)}</td><td><button class="btn-remove" data-i="${i}">x</button></td>`;
+      cartTableBody.appendChild(tr);
+    }
+    document.querySelectorAll('.btn-remove').forEach(b=> b.addEventListener('click', ()=>{ const i=Number(b.dataset.i); cart.splice(i,1); renderCart(); }));
+    document.querySelectorAll('.qty').forEach(inp=> inp.addEventListener('change', ()=>{ const i=Number(inp.dataset.i); const v = Number(inp.value||1); if(v<1) inp.value=1; const p = inventory.find(x=> String(x.id) === String(cart[i].id)); if(v > p.stock){ alert('Sobre stock disponible'); inp.value = cart[i].qty; return; } cart[i].qty = v; renderCart(); }));
+    updateTotals();
+  }
+
+  function updateTotals(){
+    const subtotal = cart.reduce((s,i)=> s + i.price_cents * i.qty, 0);
+    const tax = Math.round(subtotal * 0.16);
+    const total = subtotal + tax;
+    subtotalEl.textContent = (subtotal/100).toFixed(2);
+    taxEl.textContent = (tax/100).toFixed(2);
+    totalEl.textContent = (total/100).toFixed(2);
+    return {subtotal, tax, total};
+  }
+
+  btnClear.addEventListener('click', ()=>{ cart = []; renderCart(); });
+
+  btnCheckout.addEventListener('click', ()=>{
+    if(cart.length === 0) return alert('Carrito vacío');
+    const t = updateTotals();
+    document.getElementById('m-subtotal').textContent = (t.subtotal/100).toFixed(2);
+    document.getElementById('m-total').textContent = (t.total/100).toFixed(2);
+    document.getElementById('payment-amount').value = (t.total/100).toFixed(2);
+    document.getElementById('modal-checkout').classList.remove('hidden');
+  });
+
+  document.getElementById('modal-cancel').addEventListener('click', ()=> document.getElementById('modal-checkout').classList.add('hidden'));
+
+  document.getElementById('modal-pay').addEventListener('click', async ()=>{
+    try{
+      const method = document.getElementById('payment-method').value;
+      const amount = Number(document.getElementById('payment-amount').value || 0);
+      const t = updateTotals();
+      const result = await sellPos(cart.map(c=>({id:c.id, qty:c.qty})), method, amount, 'cashier');
+      const txt = generateReceiptText(result.sale);
+      const w = window.open('', '_blank');
+      w.document.write('<pre>'+txt+'</pre>');
+      w.document.close();
+      cart = []; renderCart();
+      inventory = await loadInitialPosInventory();
+      renderInventory();
+      document.getElementById('modal-checkout').classList.add('hidden');
+      alert('Venta registrada: ' + result.sale.id);
+    }catch(err){
+      alert('Error: ' + err.message);
+    }
+  });
+
+  // init render
+  renderInventory();
+  renderCart();
+
+});
+"""
+
+# Escribir archivos creados
+(DATA_DIR / "index_pos.html").write_text(index_html, encoding="utf-8")
+(DATA_DIR / "pos_styles.css").write_text(pos_styles, encoding="utf-8")
+(DATA_DIR / "pos_storage.js").write_text(pos_storage_js, encoding="utf-8")
+(DATA_DIR / "pos_accounting.js").write_text(pos_accounting_js, encoding="utf-8")
+(DATA_DIR / "pos.js").write_text(pos_js, encoding="utf-8")
+
+created = [
+    "/mnt/data/index_pos.html",
+    "/mnt/data/pos_styles.css",
+    "/mnt/data/pos_storage.js",
+    "/mnt/data/pos_accounting.js",
+    "/mnt/data/pos.js",
+    "/mnt/data/pos_inventory_example.json"
+]
+print("Archivos creados:", created)
+STDOUT/STDERR
+Archivos creados: ['/mnt/data/index_pos.html', '/mnt/data/pos_styles.css', '/mnt/data/pos_storage.js', '/mnt/data/pos_accounting.js', '/mnt/data/pos.js', '/mnt/data/pos_inventory_example.json']
+¡Listo, crack! 🎉 Creé la mini-aplicación POS que pediste y la dejé en tu carpeta de trabajo. Está diseñada para ser práctica, segura en cálculos (todo en centavos) y extensible con más JS cuando quieras.
+
+Archivos que acabo de generar (en /mnt/data)
+index_pos.html — Interfaz del POS (buscador + carrito + cobrar).
+
+pos_styles.css — Estilos para el POS.
+
+pos_storage.js — Helpers de almacenamiento (localStorage), carga inicial desde pos_inventory_example.json.
+
+pos_accounting.js — Lógica de venta atómica: valida stock, calcula totales en centavos, registra sale y movement.
+
+pos.js — UI: búsqueda tipo autocomplete, añadir al carrito, ajustar cantidades, checkout, generar ticket imprimible.
+
+pos_inventory_example.json — Ejemplo normalizado del inventario tomado de tu Excel (usa esto si localStorage no tiene inventory).
+
+Puedes abrir la demo así (desde la carpeta /mnt/data en tu máquina o en la sandbox):
+
+shell
+Copiar código
+python -m http.server 8000
+# luego abre http://localhost:8000/index_pos.html
+Qué hace ya la app (resumen)
+Búsqueda por nombre o por id (escribe y aparece sugerencias; presiona Enter para agregar).
+
+Soporta escáner de código de barras: el escáner actúa como teclado; escribe el código en la caja y pulsa Enter para añadir.
+
+Añadir múltiples unidades, validar stock (no deja poner más que hay).
+
+Calcula todo en enteros (centavos), aplica impuesto (16% por ahora), muestra subtotal/tax/total.
+
+Checkout: elegir forma de pago (efectivo/tarjeta/phone), ingresar monto, calcula cambio.
+
+Al cobrar: crea un registro sale y un movement, actualiza inventario en localStorage, y abre ventana con texto del ticket listo para imprimir.
+
+Datos persistentes en localStorage: pos_inventory, pos_sales, pos_movements. Puedes exportarlos desde las otras herramientas que ya tengo creadas (admin/import-export).
+
+Próximos pasos sugeridos (elige lo que quieres que haga ahora)
+A — Conectar admin para que sólo admin pueda editar POS inventory (simular login en cliente, desactivar edición sin auth).
+B — Agregar botón Exportar/Importar en la UI POS para descargar o cargar JSON (útil para backups).
+C — Integrar escáner QR/cámara (si quieres usar la cámara para QR que contenga product id — puedo añadir un fallback con getUserMedia() y jsQR).
+D — Agregar impresión de ticket más bonita (HTML/CSS) y PDF.
+E — Añadir libro contable / reconciliation UI (reports page que compare sales vs movements y muestra diferencias).
+F — Empaquetar todo y crear ZIP listo para subir a GitHub.
+
+Dime la(s) letra(s) que quieres que haga ahora y lo genero ya mismo. También dime si quieres algún cambio de UX (colores, mostrar imagen de producto, multi-impuesto, campo de descuento por línea, etc.) — lo adapto y lo dejo listo para tu repo. 
