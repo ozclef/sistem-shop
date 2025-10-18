@@ -160,6 +160,7 @@ pre { background: #f2f2f2; padding: 1rem; border-radius: 8px; }
   <script src="storage-utils.js"></script>
   <script src="accounting.js"></script>
   <script src="pos.js"></script>
+  <!-----
 </body>
 </html>
 <!----``--```---Hasta aquí tienes el **esqueleto completo visual y funcional del POS**.En el siguiente paso te paso los **JavaScript** (toda la lógica: carga del inventario, carrito, cálculo, cobro, ticket, y conexión con movimientos).¿Te paso ya la siguiente parte (todos los `.js`, empezando con `storage-utils.js` y `pos.js`)?Así lo copias todo limpio y ya queda tu sistema funcionando sobre `inventario.json`.
@@ -170,6 +171,8 @@ pre { background: #f2f2f2; padding: 1rem; border-radius: 8px; }
 ## 📦 Parte 4 — storage-utils.js
 
 ```javascript
+  ------>
+  <script>
 // storage-utils.js
 
 const INVENTORY_URL = 'inventario.json';
@@ -305,13 +308,14 @@ class AccountingSystem {
         };
     }
 }
+    /*
 ```
 
 ## 🛒 Parte 6 — pos.js
 
 ```javascript
 // pos.js
-
+*/
 class PointOfSale {
     constructor() {
         this.cart = [];
@@ -526,6 +530,8 @@ let pos;
 document.addEventListener('DOMContentLoaded', () => {
     pos = new PointOfSale();
 });
+
+    /*
 ```
 
 ## 🚀 Parte 7 — Inicializar el sistema
