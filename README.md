@@ -114,3 +114,88 @@ fueron creadas y dirigidas por el autor.
 ¿Quieres que te genere ahora **los tres archivos listos para subir** (`LICENSE`, `README` con sección de créditos, y cabecera estandarizada para tus archivos fuente)?
 Puedo hacerte una versión personalizada con tu nombre o alias exacto.
 
+---------
+
+--------
+licencia propietaria con todos los derechos reservados, y dejar por escrito que:
+
+Nadie puede usarlo sin tu autorización firmada.
+
+Si lo hacen, pueden enfrentar una demanda o reclamo legal.
+
+Cualquier uso comercial requiere un contrato o pago acordado contigo.
+
+A continuación te dejo los textos listos para copiar y pegar en tu repositorio 👇
+
+🧾 Archivo: LICENSE
+Copyright (c) 2025 Óscar Cruz Díaz (RFC: CUDO000714Q61)
+All rights reserved.
+
+Este software, así como todos sus archivos, documentación, interfaces,
+estructuras, y componentes asociados, son propiedad intelectual exclusiva
+de su autor, Óscar Cruz Díaz.
+
+Queda estrictamente prohibido el uso, copia, modificación, fusión,
+publicación, distribución, sublicencia, venta o explotación parcial o total
+de este proyecto sin la autorización expresa y por escrito del autor.
+
+Cualquier uso no autorizado, incluyendo su aplicación en proyectos
+institucionales, comerciales o académicos, constituye una violación a los
+derechos de autor conforme a la Ley Federal del Derecho de Autor (México)
+y demás normativas internacionales aplicables, y será motivo de acciones
+legales correspondientes.
+
+Se deja constancia de que:
+- Este sistema fue desarrollado íntegramente por Óscar Cruz Díaz.
+- Se reconoce la asistencia conceptual y técnica de herramientas de
+  inteligencia artificial (OpenAI ChatGPT) como apoyo de aprendizaje,
+  sin que esto transfiera derechos de autor ni de propiedad intelectual.
+- El uso por parte de la Universidad Politécnica de Tlaxcala y/o Tiendas 3B
+  queda prohibido sin contrato firmado por el autor.
+
+Para solicitar permiso de uso o colaboración comercial:
+contacto: [tu correo electrónico preferido]
+
+🪪 Fragmento para colocar en cada archivo fuente (al inicio)
+// Copyright (c) 2025 Óscar Cruz Díaz (RFC: CUDO000714Q61)
+// All rights reserved.
+// Prohibido su uso o distribución sin autorización escrita del autor.
+
+
+(Puedes adaptarlo a HTML, Python, C#, etc., según tu proyecto.)
+
+📘 Sección para agregar en tu README.md
+___________
+_________
+## 🛡️ Licencia y Derechos de Autor
+
+© 2025 Óscar Cruz Díaz (RFC: CUDO000714Q61)  
+**Todos los derechos reservados.**
+-------
+
+Este proyecto es de propiedad intelectual exclusiva del autor.  
+Está prohibido su uso, copia, modificación o distribución sin permiso por escrito.  
+__________
+
+El uso por parte de **la Universidad Politécnica de Tlaxcala** o **Tiendas 3B**
+requiere **contrato firmado y compensación económica**.  
+Cualquier uso no autorizado puede ser motivo de **demanda legal**.
+
+### Agradecimientos
+--------
+
+Desarrollo y diseño por **Óscar Cruz Díaz**,  
+con apoyo técnico y conceptual de inteligencia artificial (OpenAI ChatGPT).
+___________
+
+### ⚖️ Qué te da este esquema legal
+
+----------
+✅ Evidencia clara de autoría y propiedad exclusiva.
+✅ Te permite exigir pago o contrato antes de autorizar uso.
+✅ Si alguien (por ejemplo la universidad o Tiendas 3B) usa tu sistema sin permiso,
+puedes presentar una reclamación formal ante el INDAUTOR (México) y/o por vía civil.
+
+### 💡 Consejo adicional:
+Guarda siempre copias locales y el historial de git con tus fechas de commits;
+son prueba técnica de que el proyecto es tuyo (más fuerte que una simple captura)
