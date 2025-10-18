@@ -1,4 +1,4 @@
-
+<!------
 
 
 # Crear una mini-aplicación POS (index_pos.html + pos.js + pos_styles.css + pos_storage.js + pos_accounting.js)
@@ -52,6 +52,7 @@ with open(pos_inventory_path, "w", encoding="utf-8") as f:
 
 # Crear archivos de la aplicación POS
 index_html = """<!doctype html>
+--------->
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -60,7 +61,7 @@ index_html = """<!doctype html>
   <link rel="stylesheet" href="pos_styles.css">
 
     <style>
-        pos_styles = """
+     /*   pos_styles = """
 /* pos_styles.css - estilos sencillos para POS */
 body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:#f4f6f8;color:#111}
 .header{background:#2b6df6;color:white;padding:12px}
@@ -485,6 +486,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderCart();
 
 });
+    
     /*
 """
 
@@ -637,15 +639,15 @@ index_html = """<!doctype html>
     </div>
   </div>
 
-  <script src="pos_storage.js"></script>
-  <script src="pos_accounting.js"></script>
-  <script src="pos.js"></script>
+  <script src="pos_storage.js">< /script>
+  <script src="pos_accounting.js">< /script>
+  <script src="pos.js">< /script>
 </body>
 </html>
 """
 
 pos_styles = """
-/* pos_styles.css - estilos sencillos para POS */
+/* pos_styles.css - estilos sencillos para POS *//*
 body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:#f4f6f8;color:#111}
 .header{background:#2b6df6;color:white;padding:12px}
 .header h1{margin:0;font-size:18px}
@@ -680,7 +682,7 @@ button.secondary{background:#eee}
 """
 
 pos_storage_js = r"""
-*/
+
 // pos_storage.js - helpers para POS
 *//**/
 const POS_KEY = {
