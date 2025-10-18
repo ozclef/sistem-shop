@@ -1,0 +1,51 @@
+[
+  {
+    "id": "P001",
+    "name": "Leche UHT 1L",
+    "stock": 20,
+    "price_cents": 2500,
+    "expiry": "2026-01-07",
+    "unit": "pieza"
+  }
+]
+catalog.json (opcional, datos no volátiles):
+
+{
+  "categories": ["lácteos","panadería","aceites"],
+  "tax_percent": 16
+}
+sales.json (registro de tickets — inmutable):
+
+[
+  {
+    "id": "S20251018-0001",
+    "date": "2025-10-18T15:23:12Z",
+    "items": [
+      {"product_id":"P001","qty":2,"price_cents":2500}
+    ],
+    "subtotal_cents":5000,
+    "tax_cents":800,
+    "total_cents":5800,
+    "payment": {"method":"efectivo","amount_cents":6000,"change_cents":200},
+    "cashier":"tu_usuario"
+  }
+]
+movements.json (libro contable / caja):
+
+[
+  {
+    "id":"M20251018-0001",
+    "date":"2025-10-18T15:23:12Z",
+    "type":"venta",
+    "ref":"S20251018-0001",
+    "debit_cents":5800,
+    "credit_cents":0,
+    "account":"Caja",
+    "note":"Venta ticket S20251018-0001"
+  }
+]
+users.json (admin simulación):
+
+[
+  {"username":"admin","password_hash":"$2b$...","role":"admin"}
+]
