@@ -8,7 +8,7 @@ _________
 ###  © A 11 de octubre 
 ----
 
-###  "os-clef 100% todos los derechos reservados"
+###  "os-clef ----- todos los derechos reservados"
 " para Emilio Mendieta" 
 
 -----------
