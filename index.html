@@ -170,9 +170,10 @@ button.secondary{background:#eee}
 
 
   <script>
+/*
 <!----
   < /body>
-/* < /html>
+< /html>
 """
 pos_styles = """
 """
@@ -453,6 +454,12 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderCart();
 
 });
+
+    </script>
+</body>
+</html>
+
+      <!-------
 """
 
 # Escribir archivos
@@ -528,12 +535,50 @@ with open(pos_inventory_path, "w", encoding="utf-8") as f:
 
 # Crear archivos de la aplicación POS
 index_html = """<!doctype html>
+    --------->
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>POS - Punto de Venta (Demo)</title>
   <link rel="stylesheet" href="pos_styles.css">
+<style>
+    
+pos_styles = """
+/* pos_styles.css - estilos sencillos para POS */
+body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:#f4f6f8;color:#111}
+.header{background:#2b6df6;color:white;padding:12px}
+.header h1{margin:0;font-size:18px}
+.layout{display:flex;gap:12px;padding:12px}
+.left{flex:1}
+.right{width:340px}
+.search-block{position:relative;margin-bottom:8px}
+#barcode-input{width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;font-size:16px}
+.suggestions{position:absolute;left:0;right:0;background:white;border:1px solid #ddd;border-top:0;max-height:180px;overflow:auto;z-index:20}
+.suggestions div{padding:8px;cursor:pointer}
+.suggestions div:hover{background:#f0f4ff}
+.cart{background:white;padding:12px;border-radius:8px;box-shadow:0 6px 20px rgba(20,30,40,0.06)}
+.cart h2{margin-top:0}
+#cart-table{width:100%;border-collapse:collapse}
+#cart-table th,#cart-table td{padding:6px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+.totals{margin-top:8px;font-weight:600}
+.total{font-size:18px;margin-top:6px}
+.actions{display:flex;gap:8px;margin-top:10px}
+button{padding:8px 10px;border-radius:6px;border:0;cursor:pointer}
+button.primary{background:#2b6df6;color:white}
+button.secondary{background:#eee}
+.inventory-list{background:white;padding:8px;border-radius:8px;max-height:520px;overflow:auto;box-shadow:0 6px 20px rgba(20,30,40,0.04)}
+.inv-item{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f1f1f1}
+.inv-item .meta{font-size:13px;color:#666}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal.hidden{display:none}
+.modal-card{background:white;padding:12px;border-radius:8px;width:320px}
+.form-row{margin-top:8px}
+.form-row label{display:block;font-size:13px;color:#555;margin-bottom:4px}
+.form-row input, .form-row select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+  </style>
+      
 </head>
 <body>
   <header class="header">
@@ -607,44 +652,8 @@ index_html = """<!doctype html>
   <script src="pos_storage.js"></script>
   <script src="pos_accounting.js"></script>
   <script src="pos.js"></script>
-</body>
-</html>
-"""
 
-pos_styles = """
-/* pos_styles.css - estilos sencillos para POS */
-body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:#f4f6f8;color:#111}
-.header{background:#2b6df6;color:white;padding:12px}
-.header h1{margin:0;font-size:18px}
-.layout{display:flex;gap:12px;padding:12px}
-.left{flex:1}
-.right{width:340px}
-.search-block{position:relative;margin-bottom:8px}
-#barcode-input{width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;font-size:16px}
-.suggestions{position:absolute;left:0;right:0;background:white;border:1px solid #ddd;border-top:0;max-height:180px;overflow:auto;z-index:20}
-.suggestions div{padding:8px;cursor:pointer}
-.suggestions div:hover{background:#f0f4ff}
-.cart{background:white;padding:12px;border-radius:8px;box-shadow:0 6px 20px rgba(20,30,40,0.06)}
-.cart h2{margin-top:0}
-#cart-table{width:100%;border-collapse:collapse}
-#cart-table th,#cart-table td{padding:6px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
-.totals{margin-top:8px;font-weight:600}
-.total{font-size:18px;margin-top:6px}
-.actions{display:flex;gap:8px;margin-top:10px}
-button{padding:8px 10px;border-radius:6px;border:0;cursor:pointer}
-button.primary{background:#2b6df6;color:white}
-button.secondary{background:#eee}
-.inventory-list{background:white;padding:8px;border-radius:8px;max-height:520px;overflow:auto;box-shadow:0 6px 20px rgba(20,30,40,0.04)}
-.inv-item{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f1f1f1}
-.inv-item .meta{font-size:13px;color:#666}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:50}
-.modal.hidden{display:none}
-.modal-card{background:white;padding:12px;border-radius:8px;width:320px}
-.form-row{margin-top:8px}
-.form-row label{display:block;font-size:13px;color:#555;margin-bottom:4px}
-.form-row input, .form-row select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd}
-.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
-"""
+    <script>
 
 pos_storage_js = r"""
 // pos_storage.js - helpers para POS
@@ -767,9 +776,10 @@ function generateReceiptText(sale){
   lines.push('--------------------');
   return lines.join('\\n');
 }
-"""
 
-pos_js = r"""
+
+
+/// pos_js = r"""
 // pos.js - UI logic for POS demo
 document.addEventListener('DOMContentLoaded', async ()=>{
   const input = document.getElementById('barcode-input');
@@ -911,6 +921,12 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderCart();
 
 });
+
+    </script>
+</body>
+</html>
+<!------
+        
 """
 
 # Escribir archivos creados
