@@ -1,9 +1,9 @@
-Saltar al contenido
-Historial del chat
 
-Mejora tu plan
-Dijiste:
-ojalá ojalá recuerdes por favor para ayudarme con el mismo repositorio bueno el de caducidades más que nada para llenar un cronograma ya me acaban de pasar el archivo y creo que no te lo puedo pasar pero ahorita lo abro y paso el de ese Me podrás ayudar por favor
+# RECETA
+--------
+
+<pre>
+
 ChatGPT dijo:
 Memoria guardada actualizada
 
