@@ -3,8 +3,15 @@
 # SISTEMA DE CADUCIDADES EN TIENDA MART
 ------
 
-___ 
+__ 
+
 ###  © A 11 de octubre 
 ----
-"os & emilio Mendieta" 
+
+###  "os-clef 100% todos los derechos reservados"
+" para Emilio Mendieta" 
+-----------
+
+
+
 
